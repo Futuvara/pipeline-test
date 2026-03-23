@@ -1,0 +1,10 @@
+{
+  "workpacks": {
+    "Health Endpoint": {
+      "tracked_env_vars": [
+        "HEALTH_ENDPOINT_CONFIG_VERSION",
+        "HEALTH_ENDPOINT_LOG_LEVEL"
+      ]
+    }
+  }
+}
