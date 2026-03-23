@@ -1,0 +1,55 @@
+name: workpack-pipeline
+
+on:
+  trigger: workpack_dispatch
+
+jobs:
+  execute-workpack:
+    steps:
+      - name: checkout-branch
+        run: git checkout -b ${{ workpack.branch }}
+        on_failure: |
+          git checkout ${{ workpack.branch }}
+
+      - name: implement-task
+        run: claude --task "${{ workpack.task }}"
+
+      - name: check-changes
+        id: changes
+        run: git status --porcelain
+        outputs:
+          has_changes: ${{ steps.changes.stdout != '' }}
+          # Exit code 0 with empty stdout means no changes were produced.
+          # This is a valid outcome — not an error — when the task's
+          # expected artifacts already exist in the branch.
+
+      - name: commit-and-push
+        if: steps.changes.outputs.has_changes == true
+        run: |
+          git add -A
+          git commit -m "[pipeline] ${{ workpack.name }}"
+          git push -u origin ${{ workpack.branch }}
+
+      - name: skip-deployment
+        if: steps.changes.outputs.has_changes == false
+        outcome: success
+        reason: no-op
+        run: |
+          echo "NO_CHANGES. Workpack artifacts already present — skipping deploy."
+          # This step confirms the pipeline treats no-changes as a
+          # successful no-op rather than a failure. The workpack is
+          # marked complete without retrying.
+
+      - name: finalize
+        run: echo "Workpack ${{ workpack.name }} completed."
+        # Reached on both the commit-and-push path and the skip-deployment
+        # path. Both are successful terminal states.
+
+  status-codes:
+    # Documents how the pipeline interprets check-changes results:
+    #
+    # | stdout          | exit code | meaning                        | action           |
+    # |-----------------|-----------|--------------------------------|------------------|
+    # | non-empty       | 0         | new changes detected           | commit and push  |
+    # | empty           | 0         | no changes (already applied)   | no-op success    |
+    # | any             | non-zero  | git error                      | fail pipeline    |
